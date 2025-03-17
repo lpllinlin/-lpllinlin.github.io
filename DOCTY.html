@@ -1,0 +1,768 @@
+﻿<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小说与本章说匹配</title>
+    <style>
+        body { font-family: "Microsoft YaHei", sans-serif; margin: 0; background-color: #f5f5f5; color: #333; }
+        .container { max-width: 1200px; margin: 20px auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .chapter-selector { padding: 8px; border-radius: 4px; border: 1px solid #ddd; }
+        .content-wrapper { display: flex; gap: 20px; }
+        .novel-section { flex: 1; overflow-y: auto; max-height: 80vh; }
+        .reviews-section { flex: 1; overflow-y: auto; max-height: 80vh; }
+        .paragraph { padding: 15px; margin-bottom: 10px; background: #fff; border-left: 4px solid #4a76a8; border-radius: 4px; cursor: pointer; transition: all 0.3s; }
+        .paragraph:hover { background: #f0f7ff; }
+        .paragraph.active { background: #e6f7ff; border-left-color: #1890ff; }
+        .paragraph.has-reviews { border-left-color: #e74c3c; }
+        .review-container { padding: 15px; margin-bottom: 10px; background: #f9f9f9; border-radius: 4px; border-left: 3px solid #e74c3c; }
+        .review-item { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #ddd; }
+        .review-item:last-child { border-bottom: none; }
+        .review-user { font-weight: bold; color: #4a76a8; }
+        .highlight { background-color: #fff3cd; padding: 0 2px; }
+        .search-box { margin-bottom: 15px; padding: 10px; width: 100%; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .review-count { font-size: 0.8em; color: #e74c3c; margin-left: 10px; }
+        .loading { text-align: center; padding: 20px; }
+        .chapter-title { font-size: 1.5em; margin: 20px 0; padding-bottom: 10px; border-bottom: 2px solid #4a76a8; }
+        .file-input-container { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .file-input-group { margin-bottom: 10px; }
+        .no-reviews { color: #999; font-style: italic; }
+        .review-files-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .review-file-item { background: #e6f7ff; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; }
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; }
+        .btn { background: #4a76a8; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background: #3a5a78; }
+        .debug-info { font-size: 0.8em; color: #999; margin-top: 5px; }
+
+        /* 移动端视图切换 */
+        .mobile-view-toggle {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #4a76a8;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            text-align: center;
+            font-size: 16px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            cursor: pointer;
+        }
+
+        /* 章节目录按钮 */
+        .chapter-menu-toggle {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            background: #4a76a8;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            text-align: center;
+            font-size: 16px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 章节目录样式 */
+        .chapter-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 80%;
+            height: 100%;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            z-index: 2000;
+            overflow-y: auto;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .chapter-menu.active {
+            transform: translateX(0);
+        }
+
+        .chapter-menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #4a76a8;
+            color: white;
+        }
+
+        .chapter-menu-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .chapter-menu-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .chapter-menu-item:hover {
+            background: #f0f7ff;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1999;
+            display: none;
+        }
+
+        .overlay.active {
+            display: block;
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .content-wrapper {
+                flex-direction: column;
+            }
+            .novel-section, .reviews-section {
+                max-height: none;
+            }
+            .mobile-view-toggle {
+                display: block;
+            }
+            .container {
+                padding: 10px;
+                margin: 10px;
+            }
+            .current-paragraph-content {
+                background: #f0f7ff;
+                padding: 10px;
+                border-left: 4px solid #1890ff;
+                margin-bottom: 15px;
+                border-radius: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2>小说与本章说匹配</h2>
+        <select id="chapterSelector" class="chapter-selector">
+            <option value="all">全部章节</option>
+            <!-- 章节选项将动态添加 -->
+        </select>
+    </div>
+
+    <div class="file-input-container">
+        <div class="file-input-group">
+            <label for="novelFile">上传小说文件：</label>
+            <input type="file" id="novelFile" accept=".txt">
+        </div>
+        <div class="file-input-group">
+            <label for="reviewsFiles">上传本章说文件（可多选）：</label>
+            <input type="file" id="reviewsFiles" accept=".txt" multiple>
+            <div id="reviewFilesContainer" class="review-files-container"></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <input type="text" class="search-box" id="searchBox" placeholder="搜索小说内容或本章说...">
+        <button class="btn" id="clearSearchBtn">清除搜索</button>
+    </div>
+
+    <div id="loadingIndicator" class="loading">请上传文件...</div>
+
+    <div class="content-wrapper">
+        <div id="novelContent" class="novel-section"></div>
+        <div id="reviewsContent" class="reviews-section">
+            <h3>本章说</h3>
+            <div id="currentReviews" class="review-container">
+                <div class="no-reviews">请点击左侧段落查看对应本章说</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 章节目录 -->
+<button id="chapterMenuToggle" class="chapter-menu-toggle">章节</button>
+<div id="chapterMenu" class="chapter-menu">
+    <div class="chapter-menu-header">
+        <h3>章节目录</h3>
+        <button id="closeChapterMenu" class="chapter-menu-close">×</button>
+    </div>
+    <div id="chapterMenuItems">
+        <!-- 章节选项将动态添加 -->
+    </div>
+</div>
+<div id="overlay" class="overlay"></div>
+
+<!-- 移动端视图切换按钮 -->
+<button id="mobileViewToggle" class="mobile-view-toggle">查看小说</button>
+
+<script>
+    // 全局变量
+    let allChapters = []; // 存储所有章节
+    let allReviews = {}; // 存储所有本章说
+    let currentChapterIndex = 'all'; // 当前显示的章节
+    let currentParagraph = null; // 当前选中的段落
+    let uploadedReviewFiles = []; // 已上传的本章说文件
+    let currentView = 'novel'; // 当前视图('novel' 或 'reviews')
+    let lastScrollPosition = 0; // 记住滚动位置
+    let activeParaElement = null; // 当前激活的段落元素
+    let activeParaPosition = 0; // 当前激活段落的位置
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        // 文件上传事件
+        document.getElementById('novelFile').addEventListener('change', handleNovelFileUpload);
+        document.getElementById('reviewsFiles').addEventListener('change', handleReviewsFilesUpload);
+
+        // 章节选择器事件
+        document.getElementById('chapterSelector').addEventListener('change', function() {
+            currentChapterIndex = this.value;
+            renderContent();
+        });
+
+        // 搜索框事件
+        document.getElementById('searchBox').addEventListener('keyup', function() {
+            searchText(this.value);
+        });
+
+        // 清除搜索按钮
+        document.getElementById('clearSearchBtn').addEventListener('click', function() {
+            document.getElementById('searchBox').value = '';
+            searchText('');
+        });
+
+        // 移动端视图切换
+        document.getElementById('mobileViewToggle').addEventListener('click', toggleMobileView);
+
+        // 章节目录事件
+        document.getElementById('chapterMenuToggle').addEventListener('click', toggleChapterMenu);
+        document.getElementById('closeChapterMenu').addEventListener('click', toggleChapterMenu);
+        document.getElementById('overlay').addEventListener('click', toggleChapterMenu);
+    });
+
+    // 切换移动端视图
+    function toggleMobileView() {
+        const novelSection = document.getElementById('novelContent');
+        const reviewsSection = document.getElementById('reviewsContent');
+        const toggleButton = document.getElementById('mobileViewToggle');
+
+        if (currentView === 'novel') {
+            // 保存当前滚动位置
+            lastScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
+
+            // 切换到本章说视图
+            novelSection.style.display = 'none';
+            reviewsSection.style.display = 'block';
+            toggleButton.textContent = '查看小说';
+            currentView = 'reviews';
+        } else {
+            // 切换到小说视图
+            novelSection.style.display = 'block';
+            reviewsSection.style.display = 'none';
+            toggleButton.textContent = '查看本章说';
+            currentView = 'novel';
+
+            // 恢复滚动位置
+            if (activeParaElement) {
+                // 立即滚动到之前的位置
+                window.scrollTo(0, activeParaPosition);
+            }
+        }
+    }
+
+    // 切换章节目录
+    function toggleChapterMenu() {
+        const menu = document.getElementById('chapterMenu');
+        const overlay = document.getElementById('overlay');
+
+        menu.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+
+    // 处理小说文件上传
+    function handleNovelFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            parseNovelContent(e.target.result);
+        };
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    // 处理本章说文件上传（多个）
+    function handleReviewsFilesUpload(event) {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        // 清空已上传文件列表
+        uploadedReviewFiles = [];
+        document.getElementById('reviewFilesContainer').innerHTML = '';
+
+        // 显示已上传文件
+        for (let i = 0; i < files.length; i++) {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'review-file-item';
+            fileItem.textContent = files[i].name;
+            document.getElementById('reviewFilesContainer').appendChild(fileItem);
+
+            uploadedReviewFiles.push(files[i]);
+        }
+
+        // 初始化评论对象
+        allReviews = {};
+
+        // 处理每个文件
+        let filesProcessed = 0;
+        document.getElementById('loadingIndicator').textContent = `解析本章说文件 (0/${files.length})...`;
+        document.getElementById('loadingIndicator').style.display = 'block';
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                parseReviewContent(e.target.result, i);
+
+                filesProcessed++;
+                document.getElementById('loadingIndicator').textContent =
+                    `解析本章说文件 (${filesProcessed}/${files.length})...`;
+
+                if (filesProcessed === files.length) {
+                    renderContent();
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                }
+            };
+
+            reader.readAsText(file, 'UTF-8');
+        }
+    }
+
+    // 解析小说内容
+    function parseNovelContent(content) {
+        document.getElementById('loadingIndicator').textContent = '解析小说内容...';
+        document.getElementById('loadingIndicator').style.display = 'block';
+
+        // 使用正则表达式匹配章节标题
+        const chapterRegex = /第[一二三四五六七八九十百千万零]+章|第\d+章/g;
+        const chapterTitles = content.match(chapterRegex) || [];
+
+        // 根据章节标题分割内容
+        allChapters = [];
+        let chapterStartIndices = [];
+
+        let match;
+        while ((match = chapterRegex.exec(content)) !== null) {
+            chapterStartIndices.push(match.index);
+        }
+
+        // 添加文件结尾作为最后一个分割点
+        chapterStartIndices.push(content.length);
+
+        // 分割每个章节
+        for (let i = 0; i < chapterStartIndices.length - 1; i++) {
+            const chapterContent = content.substring(chapterStartIndices[i], chapterStartIndices[i+1]);
+            const chapterTitle = chapterTitles[i];
+
+            // 将章节内容按行分割
+            const lines = chapterContent.split('\n')
+                .filter(line => line.trim())
+                .map(line => line.trim());
+
+            // 跳过第一行（章节标题）
+            const paragraphs = lines.slice(1);
+
+            allChapters.push({
+                title: chapterTitle,
+                paragraphs: paragraphs
+            });
+        }
+
+        // 更新章节选择器
+        updateChapterSelector();
+
+        // 渲染内容
+        renderContent();
+
+        document.getElementById('loadingIndicator').style.display = 'none';
+    }
+
+    // 解析本章说文件内容
+    function parseReviewContent(content, fileIndex) {
+        // 从文件内容中提取实际章节名称
+        const chapterTitleMatch = content.match(/第[一二三四五六七八九十百千万零]+章\s/);
+        if (!chapterTitleMatch) {
+            console.warn('无法从本章说内容中找到章节标题');
+            return;
+        }
+
+        // 获取实际章节名称
+        const actualChapterTitle = chapterTitleMatch[0].trim();
+
+        // 在 allChapters 中查找匹配的章节
+        const matchedChapterIndex = allChapters.findIndex(chapter =>
+            chapter.title.includes(actualChapterTitle)
+        );
+
+        if (matchedChapterIndex === -1) {
+            console.warn(`找不到匹配的章节: ${actualChapterTitle}`);
+            return;
+        }
+
+        // 使用正确的章节索引
+        const correctChapterIndex = matchedChapterIndex;
+
+        // 初始化当前章节的评论
+        if (!allReviews[correctChapterIndex]) {
+            allReviews[correctChapterIndex] = {};
+        }
+
+        // 使用段落分隔符分割内容
+        const paragraphRegex = /-------本章说 段落-?(\d+)---------/g;
+        let match;
+        let lastIndex = 0;
+        let paragraphNumber = -1;
+        let paragraphContent = '';
+
+        // 获取所有段落标记位置
+        const paragraphMarkers = [];
+        while ((match = paragraphRegex.exec(content)) !== null) {
+            // 将段落编号从字符串转为数字，考虑到负数处理
+            const num = parseInt(match[1]);
+            // 段落编号从1开始，但数组索引从0开始，所以减1
+            paragraphNumber = num - 1;
+
+            paragraphMarkers.push({
+                index: match.index,
+                paragraphNumber: paragraphNumber
+            });
+        }
+
+        // 添加文件结尾作为最后一个分割点
+        paragraphMarkers.push({
+            index: content.length,
+            paragraphNumber: -1
+        });
+
+        // 处理每个段落的本章说
+        for (let i = 0; i < paragraphMarkers.length - 1; i++) {
+            const currentMarker = paragraphMarkers[i];
+            const nextMarker = paragraphMarkers[i + 1];
+
+            if (currentMarker.paragraphNumber < 0) continue; // 跳过无效段落编号
+
+            // 提取段落编号和本章说内容
+            const paragraphIndex = currentMarker.paragraphNumber;
+            const reviewsContent = content.substring(
+                currentMarker.index + content.substring(currentMarker.index).indexOf('\n') + 1,
+                nextMarker.index
+            ).trim();
+
+            // 解析每条评论
+            const reviews = reviewsContent.split('\n')
+                .filter(line => line.trim())
+                .map(line => {
+                    const colonIndex = line.indexOf('：');
+                    if (colonIndex > 0) {
+                        return {
+                            user: line.substring(0, colonIndex).trim(),
+                            text: line.substring(colonIndex + 1).trim()
+                        };
+                    }
+                    const englishColonIndex = line.indexOf(':');
+                    if (englishColonIndex > 0) {
+                        return {
+                            user: line.substring(0, englishColonIndex).trim(),
+                            text: line.substring(englishColonIndex + 1).trim()
+                        };
+                    }
+                    return null;
+                })
+                .filter(r => r !== null);
+
+            if (reviews.length > 0) {
+                allReviews[correctChapterIndex][paragraphIndex] = reviews;
+                console.log(`章节${correctChapterIndex} 段落${paragraphIndex} 添加了${reviews.length}条本章说`);
+            }
+        }
+    }
+
+    // 更新章节选择器
+    function updateChapterSelector() {
+        const selector = document.getElementById('chapterSelector');
+        const menuItems = document.getElementById('chapterMenuItems');
+
+        // 清除现有选项（保留"全部章节"）
+        while (selector.options.length > 1) {
+            selector.remove(1);
+        }
+
+        // 清除章节目录
+        menuItems.innerHTML = '';
+
+        // 添加"全部章节"选项到目录
+        const allChaptersItem = document.createElement('div');
+        allChaptersItem.className = 'chapter-menu-item';
+        allChaptersItem.textContent = '全部章节';
+        allChaptersItem.onclick = function() {
+            currentChapterIndex = 'all';
+            renderContent();
+            toggleChapterMenu();
+        };
+        menuItems.appendChild(allChaptersItem);
+
+        // 添加章节选项
+        allChapters.forEach((chapter, index) => {
+            // 添加到下拉选择器
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = chapter.title;
+            selector.appendChild(option);
+
+            // 添加到章节目录
+            const menuItem = document.createElement('div');
+            menuItem.className = 'chapter-menu-item';
+            menuItem.textContent = chapter.title;
+            menuItem.onclick = function() {
+                currentChapterIndex = index;
+                renderContent();
+                toggleChapterMenu();
+            };
+            menuItems.appendChild(menuItem);
+        });
+    }
+
+    // 渲染内容
+    function renderContent() {
+        const container = document.getElementById('novelContent');
+        container.innerHTML = '';
+
+        if (allChapters.length === 0) {
+            document.getElementById('loadingIndicator').textContent = '请上传小说文件...';
+            document.getElementById('loadingIndicator').style.display = 'block';
+            return;
+        }
+
+        // 显示所有章节或特定章节
+        if (currentChapterIndex === 'all') {
+            allChapters.forEach((chapter, chapterIndex) => {
+                renderChapter(container, chapter, chapterIndex);
+            });
+        } else {
+            const chapterIndex = parseInt(currentChapterIndex);
+            if (allChapters[chapterIndex]) {
+                renderChapter(container, allChapters[chapterIndex], chapterIndex);
+            }
+        }
+
+        // 恢复滚动位置
+        if (activeParaElement) {
+            window.scrollTo(0, activeParaPosition);
+        }
+    }
+
+    // 渲染单个章节
+    function renderChapter(container, chapter, chapterIndex) {
+        // 添加章节标题
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'chapter-title';
+        titleDiv.textContent = chapter.title;
+        container.appendChild(titleDiv);
+
+        // 渲染章节段落
+        chapter.paragraphs.forEach((para, paraIndex) => {
+            const paraDiv = document.createElement('div');
+            paraDiv.className = 'paragraph';
+            paraDiv.id = `para-${chapterIndex}-${paraIndex}`;
+            paraDiv.dataset.chapterIndex = chapterIndex;
+            paraDiv.dataset.paraIndex = paraIndex;
+
+            // 检查是否有对应的本章说
+            const hasReviews = allReviews[chapterIndex] && allReviews[chapterIndex][paraIndex];
+            if (hasReviews) {
+                paraDiv.classList.add('has-reviews');
+            }
+
+            const reviewCount = hasReviews ? allReviews[chapterIndex][paraIndex].length : 0;
+            const reviewCountSpan = reviewCount > 0 ?
+                `<span class="review-count">${reviewCount}条本章说</span>` : '';
+
+            paraDiv.innerHTML = `<b>段落 ${paraIndex + 1}：</b> ${para} ${reviewCountSpan}`;
+
+            paraDiv.onclick = function() {
+                // 保存当前滚动位置
+                activeParaElement = this;
+                activeParaPosition = window.pageYOffset || document.documentElement.scrollTop;
+
+                // 显示本章说
+                showReviews(chapterIndex, paraIndex, this);
+            };
+
+            container.appendChild(paraDiv);
+        });
+    }
+
+    // 显示本章说
+    function showReviews(chapterIndex, paraIndex, paraElement) {
+        // 移除之前选中的段落高亮
+        if (currentParagraph) {
+            currentParagraph.classList.remove('active');
+        }
+
+        // 高亮当前选中的段落
+        paraElement.classList.add('active');
+        currentParagraph = paraElement;
+
+        const reviewsContainer = document.getElementById('currentReviews');
+        reviewsContainer.innerHTML = '';
+
+        // 添加原段落内容（对移动端特别有用）
+        const originalPara = document.createElement('div');
+        originalPara.className = 'current-paragraph-content';
+        originalPara.innerHTML = `<b>${allChapters[chapterIndex].title} - 段落 ${paraIndex + 1}</b><br>${allChapters[chapterIndex].paragraphs[paraIndex]}`;
+        reviewsContainer.appendChild(originalPara);
+
+        // 检查是否有对应的本章说
+        if (allReviews[chapterIndex] && allReviews[chapterIndex][paraIndex]) {
+            const reviews = allReviews[chapterIndex][paraIndex];
+
+            // 添加本章说内容
+            reviews.forEach(review => {
+                const reviewItem = document.createElement('div');
+                reviewItem.className = 'review-item';
+                reviewItem.innerHTML = `<span class="review-user">${review.user}：</span> ${review.text}`;
+                reviewsContainer.appendChild(reviewItem);
+            });
+
+            // 添加调试信息
+            const debugInfo = document.createElement('div');
+            debugInfo.className = 'debug-info';
+            debugInfo.textContent = `章节索引: ${chapterIndex}, 段落索引: ${paraIndex}, 本章说数量: ${reviews.length}`;
+            reviewsContainer.appendChild(debugInfo);
+        } else {
+            reviewsContainer.innerHTML += '<div class="no-reviews">该段落没有本章说</div>';
+
+            // 添加调试信息
+            const debugInfo = document.createElement('div');
+            debugInfo.className = 'debug-info';
+            debugInfo.textContent = `章节索引: ${chapterIndex}, 段落索引: ${paraIndex}, 无本章说`;
+            reviewsContainer.appendChild(debugInfo);
+        }
+
+        // 在移动端自动切换到本章说视图
+        if (window.innerWidth <= 768 && currentView === 'novel') {
+            toggleMobileView();
+        }
+
+        // 滚动到本章说区域顶部 - 使用直接设置，不使用平滑滚动
+        document.getElementById('reviewsContent').scrollTop = 0;
+    }
+
+    // 搜索功能
+    function searchText(query) {
+        if (!query) {
+            // 如果搜索框为空，显示所有段落
+            document.querySelectorAll('.paragraph').forEach(para => {
+                para.style.display = 'block';
+                // 恢复原始内容（移除高亮）
+                const chapterIndex = para.dataset.chapterIndex;
+                const paraIndex = para.dataset.paraIndex;
+                const paragraph = allChapters[chapterIndex].paragraphs[paraIndex];
+
+                const reviewCount = allReviews[chapterIndex] && allReviews[chapterIndex][paraIndex] ?
+                    allReviews[chapterIndex][paraIndex].length : 0;
+                const reviewCountSpan = reviewCount > 0 ?
+                    `<span class="review-count">${reviewCount}条本章说</span>` : '';
+
+                para.innerHTML = `<b>段落 ${parseInt(paraIndex) + 1}：</b> ${paragraph} ${reviewCountSpan}`;
+            });
+
+            document.querySelectorAll('.chapter-title').forEach(title => {
+                title.style.display = 'block';
+            });
+            return;
+        }
+
+        query = query.toLowerCase();
+
+        // 跟踪每个章节是否有可见段落
+        const chapterHasVisibleParagraph = {};
+
+        document.querySelectorAll('.paragraph').forEach(para => {
+            // 从dataset中获取章节和段落索引
+            const chapterIndex = para.dataset.chapterIndex;
+            const paraIndex = para.dataset.paraIndex;
+
+            // 获取原始段落文本
+            const paragraph = allChapters[chapterIndex].paragraphs[paraIndex];
+            const paraText = paragraph.toLowerCase();
+
+            let showPara = paraText.includes(query);
+
+            // 也在本章说中搜索
+            if (!showPara && allReviews[chapterIndex] && allReviews[chapterIndex][paraIndex]) {
+                showPara = allReviews[chapterIndex][paraIndex].some(review =>
+                    review.user.toLowerCase().includes(query) ||
+                    review.text.toLowerCase().includes(query)
+                );
+            }
+
+            para.style.display = showPara ? 'block' : 'none';
+
+            // 更新章节可见状态
+            if (showPara) {
+                chapterHasVisibleParagraph[chapterIndex] = true;
+
+                // 高亮匹配文本
+                const reviewCount = allReviews[chapterIndex] && allReviews[chapterIndex][paraIndex] ?
+                    allReviews[chapterIndex][paraIndex].length : 0;
+                const reviewCountSpan = reviewCount > 0 ?
+                    `<span class="review-count">${reviewCount}条本章说</span>` : '';
+
+                // 高亮段落文本中的匹配项
+                const highlightedText = paragraph.replace(new RegExp(escapeRegExp(query), 'gi'),
+                    match => `<span class="highlight">${match}</span>`);
+
+                para.innerHTML = `<b>段落 ${parseInt(paraIndex) + 1}：</b> ${highlightedText} ${reviewCountSpan}`;
+            }
+        });
+
+        // 显示/隐藏章节标题
+        document.querySelectorAll('.chapter-title').forEach((title, index) => {
+            title.style.display = chapterHasVisibleParagraph[index] ? 'block' : 'none';
+        });
+    }
+
+    // 转义正则表达式特殊字符
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+</script>
+
+</body>
+</html>
+
+
