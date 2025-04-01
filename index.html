@@ -367,7 +367,7 @@
         document.getElementById('loadingIndicator').style.display = 'block';
 
         // 使用正则表达式匹配章节标题
-        const chapterRegex = /第\d+章\s+[^\n]+/g;
+        const chapterRegex = /第.+?章\s+/g;
         const chapterTitles = content.match(chapterRegex) || [];
 
         // 根据章节标题分割内容
@@ -413,7 +413,7 @@
     // 解析本章说文件内容
     function parseReviewContent(content, fileIndex) {
         // 从文件内容中提取实际章节名称
-        const chapterTitleMatch = content.match(/第\d+章\s+[^\n]+/);
+        const chapterTitleMatch = content.match(/第.+?章\s+/);
         if (!chapterTitleMatch) {
             console.warn('无法从本章说内容中找到章节标题');
             return;
