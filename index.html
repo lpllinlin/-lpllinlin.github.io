@@ -367,7 +367,7 @@
         document.getElementById('loadingIndicator').style.display = 'block';
 
         // 使用正则表达式匹配章节标题
-        const chapterRegex = /第[一二三四五六七八九十百千万零\d]+章[\s\S]*?(?=第[一二三四五六七八九十百千万零\d]+章|$)/g;
+        const chapterRegex = /第\d+章\s+[^\n]+/g;
         const chapterTitles = content.match(chapterRegex) || [];
 
         // 根据章节标题分割内容
